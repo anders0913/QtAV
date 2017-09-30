@@ -1,6 +1,6 @@
 /******************************************************************************
     QtAV Player Demo:  this file is part of QtAV examples
-    Copyright (C) 2012-2014 Wang Bin <wbsecg1@gmail.com>
+    Copyright (C) 2012-2016 Wang Bin <wbsecg1@gmail.com>
 
 *   This file is part of QtAV
 
@@ -40,6 +40,7 @@ void PropertyEditor::getProperties(QObject *obj)
 {
     mMetaProperties.clear();
     mProperties.clear();
+    mPropertyDetails.clear();
     if (!obj)
         return;
     const QMetaObject *mo = obj->metaObject();
@@ -48,12 +49,15 @@ void PropertyEditor::getProperties(QObject *obj)
         mMetaProperties.append(mp);
         QVariant v(mp.read(obj));
         if (mp.isEnumType()) {
-            mProperties.insert(mp.name(), v.toInt());//mp.enumerator().valueToKey(v.toInt())); //always use string
+            mProperties.insert(QString::fromLatin1(mp.name()), v.toInt());//mp.enumerator().valueToKey(v.toInt())); //always use string
         } else {
-            mProperties.insert(mp.name(), v);
+            mProperties.insert(QString::fromLatin1(mp.name()), v);
         }
+        const QVariant detail = obj->property(QByteArray("detail_").append(mp.name()).constData());
+        if (!detail.isNull())
+            mPropertyDetails.insert(QString::fromLatin1(mp.name()), detail.toString());
     }
-    mProperties.remove("objectName");
+    mProperties.remove(QString::fromLatin1("objectName"));
 }
 
 void PropertyEditor::set(const QVariantHash &hash)
@@ -67,7 +71,7 @@ void PropertyEditor::set(const QVariantHash &hash)
     }
 }
 
-void PropertyEditor::set(const QString &conf)
+void PropertyEditor::set(const QString &)
 {
 
 }
@@ -78,30 +82,38 @@ QString PropertyEditor::buildOptions()
     foreach (QMetaProperty mp, mMetaProperties) {
         if (qstrcmp(mp.name(), "objectName") == 0)
             continue;
-        result += mp.name();
-        result += ": ";
+        result += QString::fromLatin1("  * %1: ").arg(QString::fromLatin1(mp.name()));
         if (mp.isEnumType()) {
+            if (mp.isFlagType())
+                result += QString::fromLatin1("flag ");
+            else
+                result += QString::fromLatin1("enum ");
             QMetaEnum me(mp.enumerator());
             for (int i = 0; i < me.keyCount(); ++i) {
-                result += me.key(i);
+                result += QString::fromLatin1(me.key(i));
+                result += QString::fromLatin1("=");
+                result += QString::number(me.value(i));
                 if (i < me.keyCount() - 1)
-                    result += ",";
+                    result += QString::fromLatin1(",");
             }
         } else if (mp.type() == QVariant::Int){
-            result += "int";
+            result += QString::fromLatin1("int");
         } else if (mp.type() == QVariant::Double) {
-            result += "real";
+            result += QString::fromLatin1("real");
         } else if (mp.type() == QVariant::String) {
-            result += "text";
+            result += QString::fromLatin1("text");
         } else if (mp.type() == QVariant::Bool) {
-            result += "bool";
+            result += QString::fromLatin1("bool");
         }
-        result += "\n";
+        const QVariant detail =  mPropertyDetails.value(QString::fromLatin1(mp.name()));
+        if (!detail.isNull())
+            result += QString::fromLatin1("\n    > property detail: %1").arg(detail.toString());
+        result += QString::fromLatin1("\n");
     }
     return result;
 }
 
-QWidget* PropertyEditor::buildUi()
+QWidget* PropertyEditor::buildUi(QObject *obj)
 {
     if (mMetaProperties.isEmpty())
         return 0;
@@ -113,25 +125,25 @@ QWidget* PropertyEditor::buildUi()
     foreach (QMetaProperty mp, mMetaProperties) {
         if (qstrcmp(mp.name(), "objectName") == 0)
             continue;
-        value = mProperties[mp.name()];
+        value = mProperties[QString::fromLatin1(mp.name())];
         if (mp.isEnumType()) {
             if (mp.isFlagType()) {
-                gl->addWidget(createWidgetForFlags(mp.name(), value, mp.enumerator()), row, 0, Qt::AlignLeft | Qt::AlignVCenter);
+                gl->addWidget(createWidgetForFlags(QString::fromLatin1(mp.name()), value, mp.enumerator(), obj ? obj->property(QByteArray("detail_").append(mp.name()).constData()).toString() : QString()), row, 0, Qt::AlignLeft | Qt::AlignVCenter);
             } else {
                 gl->addWidget(new QLabel(QObject::tr(mp.name())), row, 0, Qt::AlignRight | Qt::AlignVCenter);
-                gl->addWidget(createWidgetForEnum(mp.name(), value, mp.enumerator()), row, 1, Qt::AlignLeft | Qt::AlignVCenter);
+                gl->addWidget(createWidgetForEnum(QString::fromLatin1(mp.name()), value, mp.enumerator(), obj ? obj->property(QByteArray("detail_").append(mp.name()).constData()).toString() : QString()), row, 1, Qt::AlignLeft | Qt::AlignVCenter);
             }
         } else if (mp.type() == QVariant::Int || mp.type() == QVariant::UInt || mp.type() == QVariant::LongLong || mp.type() == QVariant::ULongLong){
             gl->addWidget(new QLabel(QObject::tr(mp.name())), row, 0, Qt::AlignRight | Qt::AlignVCenter);
-            gl->addWidget(createWidgetForInt(mp.name(), value.toInt()), row, 1, Qt::AlignLeft | Qt::AlignVCenter);
+            gl->addWidget(createWidgetForInt(QString::fromLatin1(mp.name()), value.toInt(), obj ? obj->property(QByteArray("detail_").append(mp.name()).constData()).toString() : QString()), row, 1, Qt::AlignLeft | Qt::AlignVCenter);
         } else if (mp.type() == QVariant::Double) {
             gl->addWidget(new QLabel(QObject::tr(mp.name())), row, 0, Qt::AlignRight | Qt::AlignVCenter);
-            gl->addWidget(createWidgetForReal(mp.name(), value.toReal()), row, 1, Qt::AlignLeft | Qt::AlignVCenter);
+            gl->addWidget(createWidgetForReal(QString::fromLatin1(mp.name()), value.toReal(), obj ? obj->property(QByteArray("detail_").append(mp.name()).constData()).toString() : QString()), row, 1, Qt::AlignLeft | Qt::AlignVCenter);
         } else if (mp.type() == QVariant::Bool) {
-            gl->addWidget(createWidgetForBool(mp.name(), value.toBool()), row, 0, 1, 2, Qt::AlignLeft);
+            gl->addWidget(createWidgetForBool(QString::fromLatin1(mp.name()), value.toBool(), obj ? obj->property(QByteArray("detail_").append(mp.name()).constData()).toString() : QString()), row, 0, 1, 2, Qt::AlignLeft);
         } else {
             gl->addWidget(new QLabel(QObject::tr(mp.name())), row, 0, Qt::AlignRight | Qt::AlignVCenter);
-            gl->addWidget(createWidgetForText(mp.name(), value.toString()), row, 1, Qt::AlignLeft | Qt::AlignVCenter);
+            gl->addWidget(createWidgetForText(QString::fromLatin1(mp.name()), value.toString(), !mp.isWritable(), obj ? obj->property(QByteArray("detail_").append(mp.name()).constData()).toString() : QString()), row, 1, Qt::AlignLeft | Qt::AlignVCenter);
         }
         ++row;
     }
@@ -145,13 +157,15 @@ QVariantHash PropertyEditor::exportAsHash()
 
 QString PropertyEditor::exportAsConfig()
 {
-    return "";
+    return QString();
 }
 
-QWidget* PropertyEditor::createWidgetForFlags(const QString& name, const QVariant& value, QMetaEnum me, QWidget* parent)
+QWidget* PropertyEditor::createWidgetForFlags(const QString& name, const QVariant& value, QMetaEnum me, const QString &detail, QWidget* parent)
 {
     mProperties[name] = value;
     QToolButton *btn = new QToolButton(parent);
+    if (!detail.isEmpty())
+        btn->setToolTip(detail);
     btn->setObjectName(name);
     btn->setText(QObject::tr(name.toUtf8().constData()));
     btn->setPopupMode(QToolButton::InstantPopup);
@@ -159,7 +173,7 @@ QWidget* PropertyEditor::createWidgetForFlags(const QString& name, const QVarian
     menu->setObjectName(name);
     btn->setMenu(menu);
     for (int i = 0; i < me.keyCount(); ++i) {
-        QAction * a = menu->addAction(me.key(i));
+        QAction * a = menu->addAction(QString::fromLatin1(me.key(i)));
         a->setCheckable(true);
         a->setData(me.value(i));
         a->setChecked(value.toInt() & me.value(i));
@@ -168,14 +182,16 @@ QWidget* PropertyEditor::createWidgetForFlags(const QString& name, const QVarian
     return btn;
 }
 
-QWidget* PropertyEditor::createWidgetForEnum(const QString& name, const QVariant& value, QMetaEnum me, QWidget* parent)
+QWidget* PropertyEditor::createWidgetForEnum(const QString& name, const QVariant& value, QMetaEnum me, const QString &detail, QWidget* parent)
 {
     mProperties[name] = value;
     QComboBox *box = new QComboBox(parent);
+    if (!detail.isEmpty())
+        box->setToolTip(detail);
     box->setObjectName(name);
     box->setEditable(false);
     for (int i = 0; i < me.keyCount(); ++i) {
-        box->addItem(me.key(i), me.value(i));
+        box->addItem(QString::fromLatin1(me.key(i)), me.value(i));
     }
     if (value.type() == QVariant::Int) {
         box->setCurrentIndex(box->findData(value));
@@ -190,40 +206,56 @@ QWidget* PropertyEditor::createWidgetForEnum(const QString& name, const QVariant
     return box;
 }
 
-QWidget* PropertyEditor::createWidgetForInt(const QString& name, int value, QWidget* parent)
+QWidget* PropertyEditor::createWidgetForInt(const QString& name, int value, const QString& detail, QWidget* parent)
 {
     mProperties[name] = value;
     QSpinBox *box = new QSpinBox(parent);
+    if (!detail.isEmpty())
+        box->setToolTip(detail);
     box->setObjectName(name);
     box->setValue(value);
     connect(box, SIGNAL(valueChanged(int)), SLOT(onIntChange(int)));
     return box;
 }
 
-QWidget* PropertyEditor::createWidgetForReal(const QString& name, qreal value, QWidget* parent)
+QWidget* PropertyEditor::createWidgetForReal(const QString& name, qreal value, const QString &detail, QWidget* parent)
 {
     mProperties[name] = value;
     QDoubleSpinBox *box = new QDoubleSpinBox(parent);
+    if (!detail.isEmpty())
+        box->setToolTip(detail);
     box->setObjectName(name);
     box->setValue(value);
     connect(box, SIGNAL(valueChanged(double)), SLOT(onRealChange(qreal)));
     return box;
 }
 
-QWidget* PropertyEditor::createWidgetForText(const QString& name, const QString& value, QWidget* parent)
+QWidget* PropertyEditor::createWidgetForText(const QString& name, const QString& value, bool readOnly, const QString& detail, QWidget* parent)
 {
     mProperties[name] = value;
-    QLineEdit *box = new QLineEdit(parent);
-    box->setObjectName(name);
-    box->setText(value);
-    connect(box, SIGNAL(textChanged(QString)), SLOT(onTextChange(QString)));
-    return box;
+    QWidget *w = 0;
+    if (readOnly) {
+        QLabel *label = new QLabel(parent);
+        w = label;
+        label->setText(value);
+    } else {
+        QLineEdit *box = new QLineEdit(parent);
+        w = box;
+        box->setText(value);
+        connect(box, SIGNAL(textChanged(QString)), SLOT(onTextChange(QString)));
+    }
+    if (!detail.isEmpty())
+        w->setToolTip(detail);
+    w->setObjectName(name);
+    return w;
 }
 
-QWidget* PropertyEditor::createWidgetForBool(const QString& name, bool value, QWidget* parent)
+QWidget* PropertyEditor::createWidgetForBool(const QString& name, bool value, const QString &detail, QWidget* parent)
 {
     mProperties[name] = value;
     QCheckBox *box = new QCheckBox(QObject::tr(name.toUtf8().constData()), parent);
+    if (!detail.isEmpty())
+        box->setToolTip(detail);
     box->setObjectName(name);
     box->setChecked(value);
     connect(box, SIGNAL(clicked(bool)), SLOT(onBoolChange(bool)));

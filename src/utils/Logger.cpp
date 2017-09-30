@@ -1,8 +1,8 @@
 /******************************************************************************
-    QtAV:  Media play library based on Qt and FFmpeg
-    Copyright (C) 2013 Wang Bin <wbsecg1@gmail.com>
+    QtAV:  Multimedia framework based on Qt and FFmpeg
+    Copyright (C) 2012-2016 Wang Bin <wbsecg1@gmail.com>
 
-*   This file is part of QtAV
+*   This file is part of QtAV (from 2013)
 
     This library is free software; you can redistribute it and/or
     modify it under the terms of the GNU Lesser General Public
@@ -24,24 +24,49 @@
  */
 // we need LogLevel so must include QtAV_Global.h
 #include <QtCore/QString>
+#include <QtCore/QMutex>
 #include "QtAV/QtAV_Global.h"
 #include "Logger.h"
 
-#ifdef HACK_QT_LOG
+#ifndef QTAV_NO_LOG_LEVEL
 
 void ffmpeg_version_print();
 namespace QtAV {
 namespace Internal {
-static QString gQtAVLogTag("");
+static QString gQtAVLogTag = QString();
 
 #if QT_VERSION < QT_VERSION_CHECK(5, 0, 0)
 typedef Logger::Context QMessageLogger;
 #endif
 
 static void log_helper(QtMsgType msgType, const QMessageLogger *qlog, const char* msg, va_list ap) {
+    static QMutex m;
+    QMutexLocker lock(&m);
+    Q_UNUSED(lock);
+    static int repeat = 0;
+    static QString last_msg;
+    static QtMsgType last_type = QtDebugMsg;
     QString qmsg(gQtAVLogTag);
-    if (msg)
-        qmsg += QString().vsprintf(msg, ap);
+    QString formated;
+    if (msg) {
+        formated = QString().vsprintf(msg, ap);
+    }
+    // repeate check
+    if (last_type == msgType && last_msg == formated) {
+        repeat++;
+        return;
+    }
+    if (repeat > 0) {
+        // print repeat message and current message
+        qmsg = QStringLiteral("%1(repeat %2)%3\n%4%5")
+                .arg(qmsg).arg(repeat).arg(last_msg).arg(qmsg).arg(formated);
+    } else {
+        qmsg += formated;
+    }
+    repeat = 0;
+    last_type = msgType;
+    last_msg = formated;
+
     // qt_message_output is a public api
 #if QT_VERSION < QT_VERSION_CHECK(5, 0, 0)
     qt_message_output(msgType, qmsg.toUtf8().constData());
@@ -164,7 +189,7 @@ QtAVDebug Logger::debug() const
         return d;
     if (v <= (int)LogDebug || v >= (int)LogAll)
         d.setQDebug(new QDebug(ctx.debug()));
-    return d;
+    return d; //ref > 0
 }
 
 QtAVDebug Logger::warning() const
@@ -192,20 +217,24 @@ QtAVDebug Logger::critical() const
 #endif //QT_NO_DEBUG_STREAM
 
 bool isLogLevelSet();
+void print_library_info();
 
 QtAVDebug::QtAVDebug(QtMsgType t, QDebug *d)
     : type(t)
     , dbg(0)
 {
-    setQDebug(d); // call *dbg << gQtAVLogTag
+    if (d)
+        setQDebug(d); // call *dbg << gQtAVLogTag
     static bool sFirstRun = true;
     if (!sFirstRun)
         return;
     sFirstRun = false;
-    //printf("Qt Logging first run........\n");
+    printf("%s\n", aboutQtAV_PlainText().toUtf8().constData());
     // check environment var and call other functions at first Qt logging call
     // always override setLogLevel()
     QByteArray env = qgetenv("QTAV_LOG_LEVEL");
+    if (env.isEmpty())
+        env = qgetenv("QTAV_LOG");
     if (!env.isEmpty()) {
         bool ok = false;
         const int level = env.toInt(&ok);
@@ -234,27 +263,21 @@ QtAVDebug::QtAVDebug(QtMsgType t, QDebug *d)
     }
     env = qgetenv("QTAV_LOG_TAG");
     if (!env.isEmpty()) {
-        gQtAVLogTag = env;
+        gQtAVLogTag = QString::fromUtf8(env);
     }
 
     if ((int)logLevel() > (int)LogOff) {
-        ffmpeg_version_print();
-        printf("%s\n", aboutQtAV_PlainText().toLocal8Bit().constData());
-        fflush(0);
+        print_library_info();
     }
 }
 
 QtAVDebug::~QtAVDebug()
 {
-    setQDebug(0);
 }
 
 void QtAVDebug::setQDebug(QDebug *d)
 {
-    if (dbg) {
-        delete dbg;
-    }
-    dbg = d;
+    dbg = QSharedPointer<QDebug>(d);
     if (dbg && !gQtAVLogTag.isEmpty()) {
         *dbg << gQtAVLogTag;
     }
@@ -278,4 +301,4 @@ QtAVDebug debug(const char *msg, ...)
 } //namespace Internal
 } // namespace QtAV
 
-#endif //HACK_QT_LOG
+#endif //QTAV_NO_LOG_LEVEL

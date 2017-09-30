@@ -1,6 +1,6 @@
 /******************************************************************************
     this file is part of QtAV examples
-    Copyright (C) 2012-2014 Wang Bin <wbsecg1@gmail.com>
+    Copyright (C) 2012-2015 Wang Bin <wbsecg1@gmail.com>
 
 *   This file is part of QtAV
 
@@ -30,6 +30,7 @@
 #include <QLayout>
 #include <QPushButton>
 #include <QFileDialog>
+#include <QDial>
 
 using namespace QtAV;
 
@@ -39,7 +40,7 @@ VideoPlayer::VideoPlayer(QWidget *parent)
 {
     videoItem = new GraphicsItemRenderer;
     videoItem->resizeRenderer(640, 360);
-    videoItem->setOutAspectRatioMode(VideoRenderer::RendererAspectRatio);
+    videoItem->setOutAspectRatioMode(VideoRenderer::VideoAspectRatio);
 
     QGraphicsScene *scene = new QGraphicsScene(this);
     scene->addItem(videoItem);
@@ -54,19 +55,25 @@ VideoPlayer::VideoPlayer(QWidget *parent)
     scaleSlider->setRange(0, 200);
     scaleSlider->setValue(100);
 
+    QDial *orientation = new QDial();
+    orientation->setRange(0, 3);
+    orientation->setValue(0);
+
+    connect(orientation, SIGNAL(valueChanged(int)), SLOT(setOrientation(int)));
     connect(rotateSlider, SIGNAL(valueChanged(int)), SLOT(rotateVideo(int)));
     connect(scaleSlider, SIGNAL(valueChanged(int)), SLOT(scaleVideo(int)));
     QPushButton *openBtn = new QPushButton;
-    openBtn->setText("Open");
+    openBtn->setText(tr("Open"));
     connect(openBtn, SIGNAL(clicked()), SLOT(open()));
     QCheckBox *glBox = new QCheckBox();
-    glBox->setText("OpenGL");
+    glBox->setText(QString::fromLatin1("OpenGL"));
     glBox->setChecked(false);
     connect(glBox, SIGNAL(toggled(bool)), SLOT(setOpenGL(bool)));
 
     QHBoxLayout *hb = new QHBoxLayout;
     hb->addWidget(glBox);
     hb->addWidget(openBtn);
+    hb->addWidget(orientation);
     QBoxLayout *layout = new QVBoxLayout;
     layout->addWidget(view);
     layout->addWidget(rotateSlider);
@@ -101,6 +108,11 @@ void VideoPlayer::setOpenGL(bool o)
 #endif
 }
 
+void VideoPlayer::setOrientation(int value)
+{
+    videoItem->setOrientation(value*90);
+}
+
 void VideoPlayer::rotateVideo(int angle)
 {
     //rotate around the center of video element
@@ -117,7 +129,7 @@ void VideoPlayer::scaleVideo(int value)
 
 void VideoPlayer::open()
 {
-    QString f = QFileDialog::getOpenFileName(0, "Open a video");
+    QString f = QFileDialog::getOpenFileName(0, tr("Open a video"));
     if (f.isEmpty())
         return;
     play(f);

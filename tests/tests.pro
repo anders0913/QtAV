@@ -3,6 +3,13 @@ TEMPLATE = subdirs
 SUBDIRS += \
     ao \
     decoder \
-    qiodevice \
     subtitle \
+    transcode
+
+!no-widgets {
+  SUBDIRS += \
+    extract \
+    qiodevice \
+    qrc \
     playerthread
+}

@@ -1,9 +1,8 @@
 /******************************************************************************
-    QtAV:  Media play library based on Qt and FFmpeg
-    Copyright (C) 2014 Wang Bin <wbsecg1@gmail.com>
-    theoribeiro <theo@fictix.com.br>
+    QtAV:  Multimedia framework based on Qt and FFmpeg
+    Copyright (C) 2012-2016 Wang Bin <wbsecg1@gmail.com>
 
-*   This file is part of QtAV
+*   This file is part of QtAV (from 2014)
 
     This library is free software; you can redistribute it and/or
     modify it under the terms of the GNU Lesser General Public
@@ -24,28 +23,22 @@
 #include "QmlAV/SGVideoNode.h"
 #include "QtAV/VideoShader.h"
 #include "QtAV/VideoFrame.h"
-#include <QtCore/QMutexLocker>
+#include <QtCore/QScopedPointer>
 #include <QtGui/QOpenGLFunctions>
 #include <QtQuick/QSGMaterialShader>
 
+// all in QSGRenderThread
 namespace QtAV {
 
 class SGVideoMaterialShader : public QSGMaterialShader
 {
 public:
     SGVideoMaterialShader(VideoShader* s) :
-        m_shader(s)
-    {
-        setVideoFormat(s->videoFormat());
-    }
-    ~SGVideoMaterialShader() {
-        delete m_shader;
-    }
-
+        QSGMaterialShader()
+        , m_shader(s)
+    {}
     virtual void updateState(const RenderState &state, QSGMaterial *newMaterial, QSGMaterial *oldMaterial);
     virtual char const *const *attributeNames() const { return m_shader->attributeNames();}
-    void setVideoFormat(const VideoFormat& format) { m_shader->setVideoFormat(format);}
-    //void setColorSpace(ColorTransform::ColorSpace cs) { m_shader->setColorSpace(cs);}
 protected:
     virtual const char *vertexShader() const { return m_shader->vertexShader();}
     virtual const char *fragmentShader() const { return m_shader->fragmentShader();}
@@ -57,21 +50,19 @@ protected:
     int colorMatrixLocation() const { return m_shader->colorMatrixLocation();}
     int opacityLocation() const { return m_shader->opacityLocation();}
 private:
-    VideoShader *m_shader;
+    QScopedPointer<VideoShader> m_shader;
 };
 
 class SGVideoMaterial : public QSGMaterial
 {
 public:
-    SGVideoMaterial() : m_opacity(1.0) {}
-    ~SGVideoMaterial() {}
+    SGVideoMaterial() : QSGMaterial(), m_opacity(1.0) {}
 
     virtual QSGMaterialType *type() const {
-        return reinterpret_cast<QSGMaterialType*>(m_material.type());
+        return reinterpret_cast<QSGMaterialType*>((quintptr)m_material.type());
     }
 
     virtual QSGMaterialShader *createShader() const {
-        //TODO: setVideoFormat?
         return new SGVideoMaterialShader(m_material.createShader());
     }
 
@@ -82,18 +73,16 @@ public:
     }
 /*
     void updateBlending() {
-        setFlag(Blending, qFuzzyCompare(m_opacity, qreal(1.0)) ? false : true);
+        setFlag(Blending, m_material.hasAlpha() || !qFuzzyCompare(m_opacity, qreal(1.0)));
     }
 */
     void setCurrentFrame(const VideoFrame &frame) {
-        QMutexLocker lock(&m_frameMutex);
         m_material.setCurrentFrame(frame);
+        setFlag(Blending, frame.format().hasAlpha());
     }
 
     VideoMaterial* videoMaterial() { return &m_material;}
-
     qreal m_opacity;
-    QMutex m_frameMutex;
     VideoMaterial m_material;
 };
 
@@ -103,6 +92,7 @@ void SGVideoMaterialShader::updateState(const RenderState &state, QSGMaterial *n
     SGVideoMaterial *mat = static_cast<SGVideoMaterial *>(newMaterial);
     if (!m_shader->update(&mat->m_material)) //material not ready. e.g. video item have not got a frame
         return;
+    //mat->updateBlending();
     if (state.isOpacityDirty()) {
         mat->m_opacity = state.opacity();
         program()->setUniformValue(opacityLocation(), GLfloat(mat->m_opacity));
@@ -113,7 +103,8 @@ void SGVideoMaterialShader::updateState(const RenderState &state, QSGMaterial *n
 
 
 SGVideoNode::SGVideoNode()
-    : m_material(new SGVideoMaterial())
+    : QSGGeometryNode()
+    , m_material(new SGVideoMaterial())
     , m_validWidth(1.0)
 {
     setFlag(QSGNode::OwnsGeometry);
@@ -147,12 +138,13 @@ void SGVideoNode::setTexturedRectGeometry(const QRectF &rect, const QRectF &text
     if (m_validWidth == m_material->videoMaterial()->validTextureWidth()
             && rect == m_rect && textureRect == m_textureRect && orientation == m_orientation)
         return;
-
-    m_validWidth = m_material->videoMaterial()->validTextureWidth();
-    m_rect = rect;
-    m_textureRect = textureRect;
-    m_orientation = orientation;
     QRectF validTexRect = m_material->videoMaterial()->normalizedROI(textureRect);
+    if (!validTexRect.isEmpty()) {
+        m_validWidth = m_material->videoMaterial()->validTextureWidth();
+        m_rect = rect;
+        m_textureRect = textureRect;
+        m_orientation = orientation;
+    }
     //qDebug() << ">>>>>>>valid: " << m_validWidth << "  roi: " << validTexRect;
     QSGGeometry *g = geometry();
 

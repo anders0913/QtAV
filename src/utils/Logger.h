@@ -1,8 +1,8 @@
 /******************************************************************************
-    QtAV:  Media play library based on Qt and FFmpeg
-    Copyright (C) 2013 Wang Bin <wbsecg1@gmail.com>
+    QtAV:  Multimedia framework based on Qt and FFmpeg
+    Copyright (C) 2012-2016 Wang Bin <wbsecg1@gmail.com>
 
-*   This file is part of QtAV
+*   This file is part of QtAV (from 2013)
 
     This library is free software; you can redistribute it and/or
     modify it under the terms of the GNU Lesser General Public
@@ -35,12 +35,11 @@
   QTAV_LOG_LEVEL: set log level, can be "off", "debug", "warning", "critical", "fatal", "all"
  */
 
-#define HACK_QT_LOG
-#ifdef HACK_QT_LOG
+#include <QtDebug> //always include
 
-#include <QtDebug>
+#ifndef QTAV_NO_LOG_LEVEL
 #include <QtAV/QtAV_Global.h>
-
+#include <QSharedPointer>
 #ifndef Q_DECL_CONSTEXPR
 #define Q_DECL_CONSTEXPR
 #endif //Q_DECL_CONSTEXPR
@@ -53,6 +52,11 @@
 #ifndef Q_NORETURN
 #define Q_NORETURN
 #endif
+
+#ifndef Q_FUNC_INFO
+#define Q_FUNC_INFO __FUNCTION__
+#endif
+
 namespace QtAV {
 namespace Internal {
 
@@ -61,7 +65,7 @@ class QtAVDebug {
 public:
     /*!
      * \brief QtAVDebug
-     * QDebug can be copied from QMessageLogger or others
+     * QDebug can be copied from QMessageLogger or others. take the ownership of d
      * \param d nothing will be logged and t is ignored if null
      */
     QtAVDebug(QtMsgType t = QtDebugMsg, QDebug *d = 0);
@@ -117,8 +121,8 @@ public:
     }
 private:
     QtMsgType type;
-    // use ptr. ~QDebug() will print message
-    QDebug *dbg;
+    // use ptr. otherwise ~QDebug() will print message.
+    QSharedPointer<QDebug> dbg;
 };
 class Logger {
     Q_DISABLE_COPY(Logger)
@@ -223,5 +227,5 @@ inline QtAVDebug qWarning() { return QtAVDebug(QtWarningMsg); }
 } // namespace Internal
 } // namespace QtAV
 
-#endif //HACK_QT_LOG
+#endif //QTAV_NO_LOG_LEVEL
 #endif // QTAV_LOGGER_H
